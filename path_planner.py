@@ -53,8 +53,10 @@ class a_star_planner:
         
         self.cost = torch.zeros([dim, dim, angle_density], device = self.device)
         
-        (x, y, theta, steer) = self.robot.get_state()
-        
+        (x, y, angle_theta, steer) = self.robot.get_state()
+        theta = int (angle_theta/(math.pi * 2) *angle_density)
+
+
         goal_x, goal_y, run_cost, term_cost = self.goal_point
         
         startstate = (int(x/self.scale), int(y/self.scale), theta)

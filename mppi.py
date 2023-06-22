@@ -6,7 +6,7 @@ import math
 
 class MPPI:
     def __init__(self, robot, state_dim, ctrl_dim, noise_mu, noise_sigma, u_min, u_max, dynamics,
-                 running_cost, terminal_state_cost, expert_rollouts = None,
+                 running_cost, terminal_state_cost, expert_rollouts = None, expert_samples = None,
                  num_samples = 1000, horizon = 15, lambda_=1., sample_null_action= False,
                  timestep=1, device = "cpu"):
         self.robot = robot
@@ -14,7 +14,11 @@ class MPPI:
         if(expert_rollouts is None):
             self.K = num_samples
         else:
-            self.K = num_samples + expert_rollouts.shape[0]
+            if(expert_samples is None):
+                self.K = num_samples + expert_rollouts.shape[0]
+            else:
+                self.K = num_samples + sum(expert_samples)
+                
         self.T = horizon
         self.nx = state_dim # call this m
         self.nu = ctrl_dim # call this n
@@ -45,8 +49,7 @@ class MPPI:
         self.ctrl.to(self.device)
         
         self.expert_rollouts = expert_rollouts
-        
-        
+        self.expert_samples = expert_samples
         
         self.total_cost = None
         self.total_cost_exponent = None
@@ -95,20 +98,34 @@ class MPPI:
     def compute_total_cost(self, state):
         samples = self.noise_distr.rsample((self.random_samples, self.T)) # sample noise, shape: (K, T, N)
         perturbed_action = self.ctrl + samples # change actions by noise, 
+        
         if(self.expert_rollouts is not None):
-            perturbed_action = torch.cat((self.expert_rollouts, perturbed_action), axis = 0)
+            if(self.expert_samples is not None):
+                for i in range(self.expert_rollouts.shape[0]):
+                    samples = self.noise_distr.rsample((self.expert_samples[i], self.T))
+                    
+                    perturbed_expert = self.expert_rollouts[i] + samples
+                    perturbed_action = torch.cat((perturbed_action, perturbed_expert), axis = 0)
+            else:
+                samples = self.noise_distr.rsample((self.random_samples, self.T))
+                perturbed_action = torch.cat((perturbed_action, self.expert_rollouts), axis = 0)
+
         #shape: (T, N) + (K, T, N)
         if self.sample_null_action:
             perturbed_action[self.K - 1] = 0
-            
+        
         bounded_perturbed_action = self._bound_action(perturbed_action) # bound action limits
+        bounded_expert_rollouts = self._bound_action(self.expert_rollouts)
         self.bounded_samples = bounded_perturbed_action-self.ctrl
         
         action_cost = self.lambda_ * torch.matmul(torch.abs(self.bounded_samples), self.noise_sigma_inv)
         perturbation_cost = torch.sum(self.ctrl * action_cost, dim=(1, 2))
         #matrix multiplication part over all T
+
+        debug_cost, self.states, debug_actions= self.compute_rollout_costs(state, bounded_expert_rollouts)
         
-        rollout_cost, self.states, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
+        
+        rollout_cost, placeholder, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
         #written as q(x_t) and phi(x_t) in the paper
         #states is Tx K x N
         self.cost_total = rollout_cost + perturbation_cost
@@ -117,11 +134,11 @@ class MPPI:
     def compute_rollout_costs(self, state, perturbed_actions):
         if len(state.shape) is 1:
             state = torch.unsqueeze(state, 0)
-            state = state.repeat(self.K, 1)
-        states = self.dynamics(state, perturbed_actions, self.timestep, dev = self.device)
+            state = state.repeat(perturbed_actions.shape[0], 1)
         
+        states = self.dynamics(state, perturbed_actions, self.timestep, dev = self.device)        
         horizon_rollout_costs = self.running_cost(states, perturbed_actions, self.timestep)
-        
+
         rollout_costs = torch.sum(horizon_rollout_costs, axis = 1)
         rollout_costs += self.terminal_state_cost(states[:,-1,:]) # shape: (K,) , takes in last state
         
@@ -195,13 +212,13 @@ class MPPI_path_follower:
         waypoint = self.path[self.following_index]
         dist_to_goal =math.sqrt((self.robot.x-waypoint[0]) * (self.robot.x-waypoint[0]) + (self.robot.y-waypoint[1]) * (self.robot.y-waypoint[1]))
         
-        if(dist_to_goal <= 14):
+        if(dist_to_goal <= 9):
             next_waypoint = 0
             for i in range(1,10):
                 if(self.following_index+i < len(self.path)):
                     future = self.path[self.following_index+i]
                     dist_to_next = math.sqrt((self.robot.x-future[0]) * (self.robot.x-future[0]) + (self.robot.y-future[1]) * (self.robot.y-future[1]))
-                    if dist_to_next < 15:
+                    if dist_to_next < 10:
                         next_waypoint = i
             self.following_index += next_waypoint
             

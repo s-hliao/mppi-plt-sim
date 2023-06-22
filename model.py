@@ -118,13 +118,14 @@ class Bicycle:
         
         
 class Map:# may have to instantiate map class for more complex costmaps and stuff
-    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], device="cpu", obstacle_penalty=1000000.):
+    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=1000000.):
         self.goal_point = goal_point
         self.avoidance_points = avoidance_points
         self.rect_obstacles = rect_obstacles
         self.circle_obstacles = circle_obstacles
         self.device = device
         self.obstacle_penalty = obstacle_penalty
+        self.speed_weight = speed_weight
         
     def running_cost_batch_horizon(self, states, actions, dt):
         #batchified for many time points, states and controls
@@ -139,13 +140,15 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         
         x_goal, y_goal, run_cost, term_cost = self.goal_point
         
-        dist_to_goal = run_cost * torch.sqrt(((x-x_goal) * (x-x_goal)) + ((y-y_goal) * (y-y_goal)))
-        
+        dist_to_goal =  torch.sqrt(((x-x_goal) * (x-x_goal)) + ((y-y_goal) * (y-y_goal)))
+        goal_cost = run_cost * dist_to_goal
+
         in_obstacle_cost = torch.zeros_like(dist_to_goal, device = self.device)
         avoid_cost = torch.zeros_like(dist_to_goal, device = self.device)
+        speed_cost = torch.zeros_like(dist_to_goal, device = self.device)
         
         for x_avoid, y_avoid, weight in self.avoidance_points:
-            dist = torch.sqrt(((x-x_goal) * (x-x_goal)) + ((y-y_goal) * (y-y_goal)))
+            dist = torch.sqrt(((x-x_avoid) * (x-x_avoid)) + ((y-y_avoid) * (y-y_avoid)))
             
             in_range = dist.le(20)
             mask = torch.zeros_like(avoid_cost, device =self.device)
@@ -168,8 +171,6 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
             in_map= x.ge(0) & x.le(100) & y.ge(0) & y.le(100)
             
             rect_mask = rect_mask |(mask1 & mask2 & mask3 & mask4) | torch.logical_not(in_map)
-            
-            
         
         circle_mask = torch.zeros_like(avoid_cost, device =self.device)==1
         for x0, y0, radius in self.circle_obstacles:
@@ -181,8 +182,12 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
             
         rollouts_in_obstacle = (circle_mask + rect_mask).sum(axis = 1).ge(1)
         in_obstacle_cost[rollouts_in_obstacle==True] = self.obstacle_penalty
+
+        target_speed_diff = (10-velocity)
         
-        return torch.max(dist_to_goal + avoid_cost, in_obstacle_cost)
+        speed_cost =  target_speed_diff * target_speed_diff*self.speed_weight * dist_to_goal.ge(10)
+        
+        return torch.max(goal_cost + avoid_cost + speed_cost, in_obstacle_cost)
     
     def terminal_state_cost_batch(self, state):         
              
@@ -197,8 +202,8 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         
         x_goal, y_goal, run_cost, term_cost = self.goal_point
         
-        dist_to_goal = term_cost * torch.sqrt(((x-x_goal) * (x-x_goal)) + ((y-y_goal) * (y-y_goal)))
-                                              
+        dist_to_goal =  torch.sqrt(((x-x_goal) * (x-x_goal)) + ((y-y_goal) * (y-y_goal)))
+        goal_cost = term_cost * dist_to_goal                     
         avoid_cost = torch.zeros_like(dist_to_goal, device = self.device)
         
         for x_avoid, y_avoid, weight in self.avoidance_points:
@@ -212,7 +217,7 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
             
             avoid_cost += weight/(1+mask)
         
-        return dist_to_goal + avoid_cost
+        return goal_cost + avoid_cost
                                               
     def get_obstacles_batch(self, state):
         x = state[:,0]

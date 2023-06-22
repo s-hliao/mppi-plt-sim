@@ -23,8 +23,8 @@ class Simulation:
         
         self.goal_tolerance = goal_tolerance
         
-    def run(self, iterations=10, write_snapshots = True, 
-            write_rollouts=False, write_controls=False, 
+    def run(self, iterations=10, write_snapshots = True, draw_obstacles = True,
+            write_rollouts=False, write_controls=False, write_rollout_start = 0,
             write_rollouts_num= 1, write_rate = 5):
         for step in range(iterations):
             velocity, steer_rate = self.controller.find_control(self.robot.get_state())
@@ -37,8 +37,9 @@ class Simulation:
                 if(write_controls):
                     controls = self.controller.ctrl 
                 
-                self.save_snapshot(projected_rollouts=rollouts, 
-                               selected_controls=controls, n_rollouts = write_rollouts_num)
+                self.save_snapshot(projected_rollouts=rollouts, draw_obstacles=draw_obstacles,
+                               selected_controls=controls, write_start = write_rollout_start,
+                               n_rollouts = write_rollouts_num)
                 
 
             self.robot.update(velocity, steer_rate, self.timestep)
@@ -49,8 +50,10 @@ class Simulation:
             dist = math.sqrt((x_dist * x_dist) + (y_dist * y_dist))
             
             if(dist < self.goal_tolerance):
-                break
+                self.save_snapshot(full_history = True)
+                return step, True
         self.save_snapshot(full_history = True)
+        return iterations, False
     
     
     def draw_explored(self, points, draw_angle=True):
@@ -85,17 +88,13 @@ class Simulation:
         
         
         
-    def save_snapshot(self, projected_rollouts=None, selected_controls=None, n_rollouts = 1, full_history=False):
+    def save_snapshot(self, draw_obstacles = True, projected_rollouts=None, selected_controls=None, write_start = 0, n_rollouts = 1, full_history=False):
         
         img = io.imread('grid_images/grid_small.jpg')
         fig = px.imshow(img, color_continuous_scale = "greys", 
                         origin = "lower",width=800, height=800)
         
-        draw_utils.draw_points(fig, self.env.goal_point, self.env.avoidance_points)
         
-        draw_utils.draw_rect_obstacles(fig, self.env.rect_obstacles)
-        
-        draw_utils.draw_circle_obstacles(fig, self.env.circle_obstacles)
         
         # draw annotations
         if full_history:
@@ -115,8 +114,8 @@ class Simulation:
             
             if(projected_rollouts is not None):
                 horizon = len(projected_rollouts)
-                x_coords = torch.Tensor.cpu(projected_rollouts[0:n_rollouts, :,0])
-                y_coords = torch.Tensor.cpu(projected_rollouts[0:n_rollouts, :,1])
+                x_coords = torch.Tensor.cpu(projected_rollouts[write_start:write_start+n_rollouts, :,0])
+                y_coords = torch.Tensor.cpu(projected_rollouts[write_start:write_start+n_rollouts, :,1])
                 for rollout in range(n_rollouts):
                      fig.add_trace(go.Scatter(x = x_coords[rollout],
                        y = y_coords[rollout],
@@ -133,6 +132,13 @@ class Simulation:
         
             draw_utils.draw_arrow_annotations(fig, [self.robot.history[-1]])
 
+
+        
+        if (draw_obstacles):
+            draw_utils.draw_points(fig, self.env.goal_point, self.env.avoidance_points)
+            draw_utils.draw_rect_obstacles(fig, self.env.rect_obstacles)
+            
+            draw_utils.draw_circle_obstacles(fig, self.env.circle_obstacles)
             
         fig.update_layout(showlegend=False)
         fig.update_layout(coloraxis_showscale=False,
