@@ -112,7 +112,7 @@ class Simulation:
                        mode = "markers",
                        marker =dict(color="red", opacity=1, size=10))
             
-            if(projected_rollouts is not None):
+            if(projected_rollouts != None):
                 horizon = len(projected_rollouts)
                 x_coords = torch.Tensor.cpu(projected_rollouts[write_start:write_start+n_rollouts, :,0])
                 y_coords = torch.Tensor.cpu(projected_rollouts[write_start:write_start+n_rollouts, :,1])
@@ -123,7 +123,7 @@ class Simulation:
                        marker =dict(color="orange", opacity=1, size=10)))
                     
                     
-            if(selected_controls is not None):
+            if(selected_controls != None):
                 selected_rollout = self.robot.get_rollout_actions(selected_controls, self.timestep)
                 fig.add_trace(go.Scatter(x = [coord[0] for coord in selected_rollout],
                        y = [coord[1] for coord in selected_rollout],

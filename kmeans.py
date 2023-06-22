@@ -63,4 +63,4 @@ def k_means_segment(expert, k=3, iterations = 200):
 
     centers[:, :, 0] = (means[:, :, 0]* 5)+5
     centers[:, :, 1] = (means[:, :, 1]* 3)
-    return centers, assigned_to_center, loss
+    return centers, assigned_to_center, loss.item()

@@ -99,8 +99,8 @@ class MPPI:
         samples = self.noise_distr.rsample((self.random_samples, self.T)) # sample noise, shape: (K, T, N)
         perturbed_action = self.ctrl + samples # change actions by noise, 
         
-        if(self.expert_rollouts is not None):
-            if(self.expert_samples is not None):
+        if(self.expert_rollouts != None):
+            if(self.expert_samples != None):
                 for i in range(self.expert_rollouts.shape[0]):
                     samples = self.noise_distr.rsample((self.expert_samples[i], self.T))
                     
@@ -115,17 +115,19 @@ class MPPI:
             perturbed_action[self.K - 1] = 0
         
         bounded_perturbed_action = self._bound_action(perturbed_action) # bound action limits
-        bounded_expert_rollouts = self._bound_action(self.expert_rollouts)
+        if(self.expert_rollouts is not None): # debug line
+            bounded_expert_rollouts = self._bound_action(self.expert_rollouts)
         self.bounded_samples = bounded_perturbed_action-self.ctrl
         
         action_cost = self.lambda_ * torch.matmul(torch.abs(self.bounded_samples), self.noise_sigma_inv)
         perturbation_cost = torch.sum(self.ctrl * action_cost, dim=(1, 2))
         #matrix multiplication part over all T
-
-        debug_cost, self.states, debug_actions= self.compute_rollout_costs(state, bounded_expert_rollouts)
+        if(self.expert_rollouts is not None):
+            debug_cost, self.states, debug_actions= self.compute_rollout_costs(state, bounded_expert_rollouts)
+            rollout_cost, placeholder, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
+        else:
+            rollout_cost, self.states, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
         
-        
-        rollout_cost, placeholder, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
         #written as q(x_t) and phi(x_t) in the paper
         #states is Tx K x N
         self.cost_total = rollout_cost + perturbation_cost
@@ -147,7 +149,7 @@ class MPPI:
     def _bound_action(self, action):
         bounded_action = torch.empty_like(action, dtype=self.dtype, device = self.device)
             
-        if self.u_max is not None and self.u_min is not None:
+        if self.u_max != None and self.u_min != None:
             max_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_max
             min_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_min
             bounded_action = torch.max(torch.min(action, max_compare), min_compare)
@@ -296,7 +298,7 @@ class MPPI_path_follower:
     def _bound_action(self, action):
         bounded_action = torch.empty_like(action, dtype=self.dtype, device = self.device)
             
-        if self.u_max is not None and self.u_min is not None:
+        if self.u_max != None and self.u_min != None:
             max_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_max
             min_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_min
             bounded_action = torch.max(torch.min(action, max_compare), min_compare)
