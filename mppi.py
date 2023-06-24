@@ -115,14 +115,14 @@ class MPPI:
             perturbed_action[self.K - 1] = 0
         
         bounded_perturbed_action = self._bound_action(perturbed_action) # bound action limits
-        if(self.expert_rollouts is not None): # debug line
+        if(self.expert_rollouts is not None): # debugging for expert rollouts
             bounded_expert_rollouts = self._bound_action(self.expert_rollouts)
         self.bounded_samples = bounded_perturbed_action-self.ctrl
         
         action_cost = self.lambda_ * torch.matmul(torch.abs(self.bounded_samples), self.noise_sigma_inv)
         perturbation_cost = torch.sum(self.ctrl * action_cost, dim=(1, 2))
         #matrix multiplication part over all T
-        if(self.expert_rollouts is not None):
+        if(self.expert_rollouts is not None): #debugging for expert rollouts
             debug_cost, self.states, debug_actions= self.compute_rollout_costs(state, bounded_expert_rollouts)
             rollout_cost, placeholder, actions = self.compute_rollout_costs(state, bounded_perturbed_action)
         else:
@@ -214,13 +214,13 @@ class MPPI_path_follower:
         waypoint = self.path[self.following_index]
         dist_to_goal =math.sqrt((self.robot.x-waypoint[0]) * (self.robot.x-waypoint[0]) + (self.robot.y-waypoint[1]) * (self.robot.y-waypoint[1]))
         
-        if(dist_to_goal <= 9):
+        if(dist_to_goal <= 10):
             next_waypoint = 0
             for i in range(1,10):
                 if(self.following_index+i < len(self.path)):
                     future = self.path[self.following_index+i]
                     dist_to_next = math.sqrt((self.robot.x-future[0]) * (self.robot.x-future[0]) + (self.robot.y-future[1]) * (self.robot.y-future[1]))
-                    if dist_to_next < 10:
+                    if dist_to_next < 11:
                         next_waypoint = i
             self.following_index += next_waypoint
             

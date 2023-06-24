@@ -27,7 +27,7 @@ class Simulation:
             write_rollouts=False, write_controls=False, write_rollout_start = 0,
             write_rollouts_num= 1, write_rate = 5):
         for step in range(iterations):
-            velocity, steer_rate = self.controller.find_control(self.robot.get_state())
+            velocity, steer = self.controller.find_control(self.robot.get_state())
             if(write_snapshots and self.steps % write_rate==0):
                 rollouts = None
                 controls = None
@@ -42,8 +42,16 @@ class Simulation:
                                n_rollouts = write_rollouts_num)
                 
 
-            self.robot.update(velocity, steer_rate, self.timestep)
+            self.robot.update(velocity, steer, self.timestep)
             self.steps+=1
+
+            robot_state = torch.tensor(self.robot.get_state(), device = self.env.device)
+
+            
+            if(self.env.get_obstacles_batch(robot_state[None, :]) > 1 ):
+                self.save_snapshot(full_history = True)
+                print(self.env.get_obstacles_batch(robot_state[None, :]) )
+                return iterations, False
             
             x_dist = (self.robot.x-self.env.goal_point[0])
             y_dist = (self.robot.y-self.env.goal_point[1])
@@ -103,7 +111,6 @@ class Simulation:
                        y = [coord[1] for coord in history],
                        mode = "markers",
                        marker =dict(color="green", opacity=1, size=10))
-            
             draw_utils.draw_arrow_annotations(fig, self.robot.history)
 
         else:

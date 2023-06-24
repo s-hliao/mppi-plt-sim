@@ -8,23 +8,22 @@ class Bicycle:
         self.x = x
         self.y = y
         self.theta = theta
-        self.steer = 0
         self.L = 0
-        self.history = [(x,y,theta,0)]
+        self.history = [(x,y,theta)]
         self.control_history = []
         
     def get_state(self):
-        return self.x, self.y, self.theta, self.steer
+        return self.x, self.y, self.theta
     
     def get_rollout_actions(self, actions, delta_t):
         
         
-        curstate = (self.x, self.y, self.theta, self.steer)
+        curstate = (self.x, self.y, self.theta)
         states = [curstate]
         for action in actions:
             velocity=action[0]
-            steer_rate = action[1]
-            x, y, theta, steer = curstate
+            steer = action[1]
+            x, y, theta= curstate
             x_dot = velocity*math.cos(theta) 
             y_dot = velocity*math.sin(theta) 
             theta_dot = steer
@@ -34,7 +33,6 @@ class Bicycle:
             x+= x_dot * delta_t
             y += y_dot * delta_t
             theta+= theta_dot * delta_t
-            steer+= steer_rate * delta_t
 
             if(torch.is_tensor(x)):
                 x = x.item()
@@ -42,11 +40,9 @@ class Bicycle:
                 y = y.item()
             if(torch.is_tensor(theta)):
                 theta = theta.item()
-            if(torch.is_tensor(steer)):
-                steer = steer.item()
         
-            states.append((x, y, theta, steer))
-            curstate = (x, y, theta, steer)
+            states.append((x, y, theta))
+            curstate = (x, y, theta)
             
         return states
     
@@ -55,23 +51,17 @@ class Bicycle:
         x = torch.unsqueeze(state[:,0], 1)
         y = torch.unsqueeze(state[:,1], 1)
         theta = torch.unsqueeze(state[:,2], 1)
-        steer = torch.unsqueeze(state[:,3], 1)
         # batchified for many controls and states, overall timesteps
         velocity = actions[:,:,0]
-        steer_rate = actions[:, :, 1]      
+        steer = actions[:, :, 1]      
             
         horizon_states = torch.empty((actions.shape[0], actions.shape[1],
                                           state.shape[1]), dtype=state.dtype, device =dev)
         
-        steer_dot = steer_rate #steer_dot
-        steer_displacement = torch.cumsum(steer_dot * delta_t, axis=1) # sum across all t
-        horizon_states[:,:,3] = steer + steer_displacement # all steer positions across the horizon
-        
-        
         if(self.L is not 0):
             theta_dot  = velocity/(self.L/torch.tan(steer))
         else:
-            theta_dot = horizon_states[:,:,3] #theta_dot
+            theta_dot = steer #theta_dot
             
         theta_displacement = torch.cumsum(theta_dot * delta_t, axis=1) # sum across all t
         horizon_states[:,:,2] = theta + theta_displacement # all theta positions across the horizon
@@ -88,17 +78,16 @@ class Bicycle:
 
         return horizon_states
     
-    def update(self, velocity, steer_rate, delta_t):
+    def update(self, velocity, steer, delta_t):
         x_dot = velocity*math.cos(self.theta) 
         y_dot = velocity*math.sin(self.theta) 
-        theta_dot = self.steer
+        theta_dot = steer
         if(self.L is not 0):
-            theta_dot = velocity/(self.L/math.tan(self.steer))
+            theta_dot = velocity/(self.L/math.tan(steer))
         
         self.x+= x_dot * delta_t
         self.y += y_dot * delta_t
         self.theta+= theta_dot * delta_t
-        self.steer+= steer_rate * delta_t
         
         if(torch.is_tensor(self.x)):
             self.x = self.x.item()
@@ -106,11 +95,9 @@ class Bicycle:
             self.y = self.y.item()
         if(torch.is_tensor(self.theta)):
             self.theta = self.theta.item()
-        if(torch.is_tensor(self.steer)):
-            self.steer = self.steer.item()
         
-        self.history.append((self.x, self.y, self.theta, self.steer))
-        self.control_history.append(torch.tensor([velocity, steer_rate], dtype =torch.float))
+        self.history.append((self.x, self.y, self.theta))
+        self.control_history.append(torch.tensor([velocity, steer], dtype =torch.float))
         
         
     def get_history(self):
@@ -118,7 +105,7 @@ class Bicycle:
         
         
 class Map:# may have to instantiate map class for more complex costmaps and stuff
-    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=1000000.):
+    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=10000.):
         self.goal_point = goal_point
         self.avoidance_points = avoidance_points
         self.rect_obstacles = rect_obstacles
@@ -132,9 +119,8 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         x = states[:,:,0]
         y = states[:,:,1]
         theta = states[:,:,2]
-        steer = states[:,:,3]
         velocity = actions[:,:,0]
-        steer_rate = actions[:,:,1]
+        steer = actions[:,:,1]
         
         #print(self.goal_point)
         
@@ -198,7 +184,6 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         x = state[:,0]
         y = state[:,1]
         theta = state[:,2]
-        steer = state[:,3]
         
         x_goal, y_goal, run_cost, term_cost = self.goal_point
         
@@ -223,7 +208,6 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         x = state[:,0]
         y = state[:,1]
         theta = state[:,2]
-        steer = state[:,3]
                                               
         rect_mask = torch.zeros_like(x, device =self.device)==1
         for x0, y0, x1, y1 in self.rect_obstacles:

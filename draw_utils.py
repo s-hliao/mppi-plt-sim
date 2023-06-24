@@ -80,7 +80,7 @@ def draw_points(fig, goal_point, avoidance_points=[] ):
     
 def draw_arrow_annotations(fig, robot_history):
     arrow_list = []
-    for x1, y1, theta, steer in robot_history:
+    for x1, y1, theta in robot_history:
         arrow = go.layout.Annotation(dict(
                         x=x1+(5*math.cos(theta)),
                         y=y1+(5*math.sin(theta)),
