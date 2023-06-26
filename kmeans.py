@@ -57,7 +57,6 @@ def k_means_segment(expert, k=3, iterations = 200):
     assigned_to_center = []
     for iter in range(iterations):
         loss, means, assignments = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
-
     for i in range(len(means)):
         assigned_to_center.append(torch.sum(assignments==i).item())
 

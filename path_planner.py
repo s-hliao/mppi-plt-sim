@@ -49,7 +49,6 @@ class a_star_planner:
         linearized_costmap = self.costmap_func(linearized_states) + (self.timestep) #penalizes extra movements
         self.h = torch.reshape(linearized_h, (dim, dim, angle_density))
         self.costmap = self.timestep + torch.reshape(linearized_costmap, (dim, dim, angle_density))
-        print(dim, angle_density)
         self.cost = torch.zeros([dim, dim, angle_density], device = self.device)
         
         (x, y, angle_theta) = self.robot.get_state()
