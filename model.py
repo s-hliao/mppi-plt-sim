@@ -76,6 +76,18 @@ class Bicycle:
         
         # horizon_states should be of shape : K x M
 
+        del x
+        del y
+        del theta
+        del velocity
+        del steer
+        del theta_displacement
+        del theta_dot
+        del x_dot
+        del x_displacement
+        del y_dot
+        del y_displacement
+
         return horizon_states
     
     def update(self, velocity, steer, delta_t):
@@ -105,7 +117,7 @@ class Bicycle:
         
         
 class Map:# may have to instantiate map class for more complex costmaps and stuff
-    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=10000.):
+    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=10000000.):
         self.goal_point = goal_point
         self.avoidance_points = avoidance_points
         self.rect_obstacles = rect_obstacles
@@ -172,12 +184,15 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
         target_speed_diff = (10-velocity)
         
         speed_cost =  target_speed_diff * target_speed_diff*self.speed_weight * dist_to_goal.ge(10)
+
+        del rollouts_in_obstacle
+        del rect_mask
+        del circle_mask
         
         return torch.max(goal_cost + avoid_cost + speed_cost, in_obstacle_cost)
     
     def terminal_state_cost_batch(self, state):         
              
-        
         return torch.max(self.get_distance_batch(state), self.get_obstacles_batch(state))
     
     def get_distance_batch(self, state):
@@ -233,7 +248,9 @@ class Map:# may have to instantiate map class for more complex costmaps and stuf
             circle_mask = circle_mask | inside_circle
             
         in_obstacle_cost = self.obstacle_penalty * (circle_mask + rect_mask).ge(1)
-                                              
+        
+        del rect_mask
+        del circle_mask
         return in_obstacle_cost
                                               
                                               

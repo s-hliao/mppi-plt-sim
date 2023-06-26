@@ -6,7 +6,7 @@ import math
 
 class MPPI:
     def __init__(self, robot, state_dim, ctrl_dim, noise_mu, noise_sigma, u_min, u_max, dynamics,
-                 running_cost, terminal_state_cost, expert_rollouts = None, expert_samples = None,
+                 running_cost, terminal_state_cost, expert_rollouts = None, expert_samples = None, noise_expert = None,
                  num_samples = 1000, horizon = 15, lambda_=1., sample_null_action= False,
                  timestep=1, device = "cpu"):
         self.robot = robot
@@ -50,6 +50,10 @@ class MPPI:
         
         self.expert_rollouts = expert_rollouts
         self.expert_samples = expert_samples
+
+        if(self.expert_samples is not None and noise_expert is not None):
+            self.expert_sigma = noise_expert.to(self.device)
+            self.expert_distr = MultivariateNormal(self.noise_mu, covariance_matrix = self.noise_sigma)
         
         self.total_cost = None
         self.total_cost_exponent = None
@@ -89,6 +93,12 @@ class MPPI:
         #add perturbations to controls as per algo for all T
         self.ctrl = self.ctrl+perturbations #shape : (T, N)
 
+        del beta
+        del eta
+        del self.omega
+        del state
+        del perturbations
+
         
         return self.ctrl[0] # of size N
     
@@ -102,7 +112,7 @@ class MPPI:
         if(self.expert_rollouts != None):
             if(self.expert_samples != None):
                 for i in range(self.expert_rollouts.shape[0]):
-                    samples = self.noise_distr.rsample((self.expert_samples[i], self.T))
+                    samples = self.expert_distr.rsample((self.expert_samples[i], self.T))
                     
                     perturbed_expert = self.expert_rollouts[i] + samples
                     perturbed_action = torch.cat((perturbed_action, perturbed_expert), axis = 0)
@@ -131,6 +141,13 @@ class MPPI:
         #written as q(x_t) and phi(x_t) in the paper
         #states is Tx K x N
         self.cost_total = rollout_cost + perturbation_cost
+
+        del samples
+        del perturbed_action
+        del action_cost
+        del rollout_cost
+        del perturbation_cost
+
         return self.cost_total
                                             
     def compute_rollout_costs(self, state, perturbed_actions):
@@ -153,6 +170,9 @@ class MPPI:
             max_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_max
             min_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_min
             bounded_action = torch.max(torch.min(action, max_compare), min_compare)
+
+            del max_compare
+            del min_compare
                 
             return bounded_action
         return action
@@ -214,19 +234,19 @@ class MPPI_path_follower:
         waypoint = self.path[self.following_index]
         dist_to_goal =math.sqrt((self.robot.x-waypoint[0]) * (self.robot.x-waypoint[0]) + (self.robot.y-waypoint[1]) * (self.robot.y-waypoint[1]))
         
-        if(dist_to_goal <= 10):
+        if(dist_to_goal <= 5):
             next_waypoint = 0
             for i in range(1,10):
                 if(self.following_index+i < len(self.path)):
                     future = self.path[self.following_index+i]
                     dist_to_next = math.sqrt((self.robot.x-future[0]) * (self.robot.x-future[0]) + (self.robot.y-future[1]) * (self.robot.y-future[1]))
-                    if dist_to_next < 11:
+                    if dist_to_next < 6:
                         next_waypoint = i
             self.following_index += next_waypoint
             
             x_goal, y_goal, run_cost, term_cost = self.env.goal_point
             self.env.goal_point =self.path[self.following_index][0], self.path[self.following_index][1], run_cost, term_cost
-            
+        
             
         self.ctrl = torch.roll(self.ctrl, -1, dims=0) #controls of shape (T, N) (t timesteps)
         
@@ -255,6 +275,13 @@ class MPPI_path_follower:
         #add perturbations to controls as per algo for all T
         self.ctrl = self.ctrl+perturbations #shape : (T, N)
 
+        del beta
+        del eta
+        del self.omega
+        del state
+        del perturbations
+
+
         
         return self.ctrl[0] # of size N
     
@@ -280,6 +307,13 @@ class MPPI_path_follower:
         #written as q(x_t) and phi(x_t) in the paper
         #states is Tx K x N
         self.cost_total = rollout_cost + perturbation_cost
+
+        del samples
+        del perturbed_action
+        del action_cost
+        del rollout_cost
+        del perturbation_cost
+
         return self.cost_total
                                             
     def compute_rollout_costs(self, state, perturbed_actions):
@@ -302,6 +336,9 @@ class MPPI_path_follower:
             max_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_max
             min_compare = torch.ones_like(action, dtype=self.dtype, device = self.device) * self.u_min
             bounded_action = torch.max(torch.min(action, max_compare), min_compare)
+
+            del max_compare
+            del min_compare
                 
             return bounded_action
         return action

@@ -20,6 +20,10 @@ def init_means(normalized_expert, k, dev = "cpu"):
 
         num_init+=1
 
+        del diff
+        del dist
+        del total_dist
+
     return means
 
 
@@ -40,6 +44,9 @@ def k_means_step(normalized_expert, k, means, dev = "cpu"):
         new_means[i] = torch.mean(normalized_expert[reclusters==i], dim = 0)
     
         loss += torch.sum(torch.where(reclusters==i,dist[i], torch.zeros_like(dist[i], device = torch.device('cuda:0'))))
+    
+    del diff
+    del dist
 
     return loss, new_means, reclusters
 
@@ -62,4 +69,7 @@ def k_means_segment(expert, k=3, iterations = 200):
 
     centers[:, :, 0] = (means[:, :, 0]* 5)+5
     centers[:, :, 1] = (means[:, :, 1]* 3)
+
+    del normalized_expert
+
     return centers, assigned_to_center, loss.item()

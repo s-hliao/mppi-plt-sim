@@ -50,8 +50,7 @@ class Simulation:
             
             if(self.env.get_obstacles_batch(robot_state[None, :]) > 1 ):
                 self.save_snapshot(full_history = True)
-                print(self.env.get_obstacles_batch(robot_state[None, :]) )
-                return iterations, False
+                return step, False
             
             x_dist = (self.robot.x-self.env.goal_point[0])
             y_dist = (self.robot.y-self.env.goal_point[1])

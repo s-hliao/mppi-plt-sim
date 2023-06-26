@@ -49,6 +49,7 @@ class a_star_planner:
         linearized_costmap = self.costmap_func(linearized_states) + (self.timestep) #penalizes extra movements
         self.h = torch.reshape(linearized_h, (dim, dim, angle_density))
         self.costmap = self.timestep + torch.reshape(linearized_costmap, (dim, dim, angle_density))
+        
         self.cost = torch.zeros([dim, dim, angle_density], device = self.device)
         
         (x, y, angle_theta) = self.robot.get_state()
@@ -59,7 +60,7 @@ class a_star_planner:
         
         startstate = (int(x/self.scale), int(y/self.scale), theta)
         curstate = (int(x/self.scale), int(y/self.scale), theta,)
-        parent = torch.ones([dim, dim, angle_density, 3], device = self.device, dtype=torch.long)*-1
+        parent = torch.ones([dim, dim, angle_density, 3], device = torch.device("cpu"), dtype=torch.long)*-1
         
         q = PriorityQueue()
         
@@ -105,7 +106,7 @@ class a_star_planner:
             dist = math.sqrt((x*self.scale-goal_x)*(x*self.scale-goal_x) 
                              + (y*self.scale-goal_y)*(y*self.scale-goal_y))
             if dist < self.goal_tolerance:
-                self.path_end = torch.tensor((x, y, theta),dtype = torch.long, device = self.device)
+                self.path_end = torch.tensor((x, y, theta),dtype = torch.long, device = torch.device("cpu"))
             
             for next_x, next_y, next_theta in neighbors:
                 
@@ -115,7 +116,7 @@ class a_star_planner:
                     
                     next_heuristic_cost = self.cost[next_x, next_y, next_theta] + self.h[next_x, next_y, next_theta]
                     
-                    parent[next_x, next_y, next_theta,:] = torch.tensor([x, y, theta],device = self.device)
+                    parent[next_x, next_y, next_theta,:] = torch.tensor([x, y, theta],device = torch.device("cpu"))
                     if(self.path_end is None):
                         q.put((next_heuristic_cost.item(), (next_x, next_y, next_theta)))
                         
@@ -127,27 +128,28 @@ class a_star_planner:
             #iteration_count+=1
             
                 
-        
+        del self.cost
+        del axis
+        del theta
+
         self.path=[]
         if(self.path_end != None):
             curstate = self.path_end
             self.path.append((
                     curstate[0].item()*self.scale,
                     curstate[1].item()*self.scale,
-                    curstate[2].item()*2*math.pi/self.angle_density,
-                    0
+                    curstate[2].item()*2*math.pi/self.angle_density
                 ))
-            
-            while not torch.all(curstate == 
-                                torch.tensor(startstate, device = self.device, dtype = torch.long)):
+            start_compare = torch.tensor(startstate, device = torch.device("cpu"), dtype = torch.long)
+            while not torch.all(curstate == start_compare):
 
                 curstate = parent[curstate[0], curstate[1], curstate[2]]
                 self.path.append((
                     curstate[0].item()*self.scale,
                     curstate[1].item()*self.scale,
-                    curstate[2].item()*2*math.pi/self.angle_density,
-                    0
+                    curstate[2].item()*2*math.pi/self.angle_density
                 ))
+            del start_compare
             self.path.reverse()
                 
 
