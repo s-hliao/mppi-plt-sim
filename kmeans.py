@@ -19,12 +19,33 @@ def init_means(normalized_expert, k, dev = "cpu"):
         means[num_init] = normalized_expert[np.random.choice(num_expert, p = closest_c_dist.cpu().numpy()/total_dist.item())]
 
         num_init+=1
-
         del diff
         del dist
+        del closest_c_dist
+        del min_indices
         del total_dist
 
+
     return means
+
+def get_flattened_normalized_covariance(normalized_expert, means, dev = "cpu"):
+
+    flattened_expert = torch.flatten(normalized_expert, start_dim = 1)
+    flattened_means = torch.flatten(normalized_expert, start_dim = 1)
+
+    matrix_size = (normalized_expert.shape[1] * normalized_expert.shape[2])
+
+    flattened_covariance_matrices = torch.tensor(means.shape[0], matrix_size, matrix_size)
+
+    k =means.shape[0]
+    for i in range(k):
+        diff = flattened_expert[:, :] - flattened_means[i, :]
+
+        covariance_matrices[i] = torch.matmul(torch.t(diff), diff)/normalized_expert.shape[0]
+
+    return flattened_covariance_matrices
+        
+
 
 
 def k_means_step(normalized_expert, k, means, dev = "cpu"):
@@ -44,11 +65,12 @@ def k_means_step(normalized_expert, k, means, dev = "cpu"):
         new_means[i] = torch.mean(normalized_expert[reclusters==i], dim = 0)
     
         loss += torch.sum(torch.where(reclusters==i,dist[i], torch.zeros_like(dist[i], device = torch.device('cuda:0'))))
-    
+
     del diff
     del dist
+    del reclusters
 
-    return loss, new_means, reclusters
+    return loss, new_means
 
 def k_means_segment(expert, k=3, iterations = 200):
     #kplusplus init
@@ -61,15 +83,10 @@ def k_means_segment(expert, k=3, iterations = 200):
     means = init_means(normalized_expert, k, dev = torch.device('cuda:0'))
     centers = torch.empty_like(means, device = torch.device('cuda:0'))
     
-    assigned_to_center = []
     for iter in range(iterations):
-        loss, means, assignments = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
-    for i in range(len(means)):
-        assigned_to_center.append(torch.sum(assignments==i).item())
+        loss, means = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
+
 
     centers[:, :, 0] = (means[:, :, 0]* 5)+5
     centers[:, :, 1] = (means[:, :, 1]* 3)
-
-    del normalized_expert
-
-    return centers, assigned_to_center, loss.item()
+    return centers, loss.item()

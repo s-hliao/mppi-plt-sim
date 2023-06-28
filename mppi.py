@@ -53,7 +53,7 @@ class MPPI:
 
         if(self.expert_samples is not None and noise_expert is not None):
             self.expert_sigma = noise_expert.to(self.device)
-            self.expert_distr = MultivariateNormal(self.noise_mu, covariance_matrix = self.noise_sigma)
+            self.expert_distr = MultivariateNormal(self.noise_sigma, covariance_matrix = self.expert_sigma)
         
         self.total_cost = None
         self.total_cost_exponent = None
@@ -234,13 +234,13 @@ class MPPI_path_follower:
         waypoint = self.path[self.following_index]
         dist_to_goal =math.sqrt((self.robot.x-waypoint[0]) * (self.robot.x-waypoint[0]) + (self.robot.y-waypoint[1]) * (self.robot.y-waypoint[1]))
         
-        if(dist_to_goal <= 5):
+        if(dist_to_goal <= 9):
             next_waypoint = 0
             for i in range(1,10):
                 if(self.following_index+i < len(self.path)):
                     future = self.path[self.following_index+i]
                     dist_to_next = math.sqrt((self.robot.x-future[0]) * (self.robot.x-future[0]) + (self.robot.y-future[1]) * (self.robot.y-future[1]))
-                    if dist_to_next < 6:
+                    if dist_to_next < 10:
                         next_waypoint = i
             self.following_index += next_waypoint
             
