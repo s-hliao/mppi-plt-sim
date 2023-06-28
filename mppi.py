@@ -53,7 +53,7 @@ class MPPI:
 
         if(self.expert_samples is not None and noise_expert is not None):
             self.expert_sigma = noise_expert.to(self.device)
-            self.expert_distr = MultivariateNormal(self.noise_sigma, covariance_matrix = self.expert_sigma)
+            self.expert_distr = MultivariateNormal(self.noise_mu, covariance_matrix = self.expert_sigma)
         
         self.total_cost = None
         self.total_cost_exponent = None
@@ -113,7 +113,6 @@ class MPPI:
             if(self.expert_samples != None):
                 for i in range(self.expert_rollouts.shape[0]):
                     samples = self.expert_distr.rsample((self.expert_samples[i], self.T))
-                    
                     perturbed_expert = self.expert_rollouts[i] + samples
                     perturbed_action = torch.cat((perturbed_action, perturbed_expert), axis = 0)
             else:
