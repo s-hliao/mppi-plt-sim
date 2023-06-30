@@ -28,22 +28,26 @@ def init_means(normalized_expert, k, dev = "cpu"):
 
     return means
 
-def get_flattened_normalized_covariance(normalized_expert, means, dev = "cpu"):
-
-    flattened_expert = torch.flatten(normalized_expert, start_dim = 1)
-    flattened_means = torch.flatten(normalized_expert, start_dim = 1)
+def get_flattened_normalized_covariance(normalized_expert, k, means,clusters, dev = "cpu"):
+    # normalized expert is rollouts x horizon x controls
+    # means is k x horizon x controls
+    flat_expert = torch.flatten(torch.swapaxes(normalized_expert, 1, 2), start_dim = 1)
+    flat_means = torch.flatten(torch.swapaxes(means, 1, 2), start_dim = 1)
 
     matrix_size = (normalized_expert.shape[1] * normalized_expert.shape[2])
 
-    flattened_covariance_matrices = torch.tensor(means.shape[0], matrix_size, matrix_size)
+    flat_covariance_matrices = torch.empty((means.shape[0], matrix_size, matrix_size), 
+        dtype = normalized_expert.dtype, device = dev)
 
-    k =means.shape[0]
     for i in range(k):
-        diff = flattened_expert[:, :] - flattened_means[i, :]
+        diff = flat_expert[clusters==i, :] - flat_means[i, :]
+        flat_covariance_matrices[i] = torch.matmul(torch.t(diff), diff)/normalized_expert.shape[0]
 
-        covariance_matrices[i] = torch.matmul(torch.t(diff), diff)/normalized_expert.shape[0]
+        del diff
+    del flat_expert
+    del flat_means
 
-    return flattened_covariance_matrices
+    return flat_covariance_matrices
         
 
 
@@ -68,9 +72,8 @@ def k_means_step(normalized_expert, k, means, dev = "cpu"):
 
     del diff
     del dist
-    del reclusters
 
-    return loss, new_means
+    return loss, new_means, reclusters
 
 def k_means_segment(expert, k=3, iterations = 200):
     #kplusplus init
@@ -78,15 +81,29 @@ def k_means_segment(expert, k=3, iterations = 200):
     
 
     normalized_expert[:, :, 0] = (expert[:, :, 0] - 5)/5
-    normalized_expert[:, :, 1] = (expert[:, :, 1] - 0)/3
+    normalized_expert[:, :, 1] = (expert[:, :, 1] - 0)/4
 
     means = init_means(normalized_expert, k, dev = torch.device('cuda:0'))
     centers = torch.empty_like(means, device = torch.device('cuda:0'))
     
     for iter in range(iterations):
-        loss, means = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
+        loss, means, assignments = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
+    # flat_covariance_matrices = get_flattened_normalized_covariance(normalized_expert, k, means, assignments, dev = torch.device('cuda:0'))
 
+    del assignments
 
     centers[:, :, 0] = (means[:, :, 0]* 5)+5
     centers[:, :, 1] = (means[:, :, 1]* 3)
+
+    horizon_length = normalized_expert.shape[1]
+
+    # flat_covariance_matrices[:, :horizon_length, :] *= 5
+    # flat_covariance_matrices[:, horizon_length:, :] *= 3
+
+    # flat_covariance_matrices[:, :, :horizon_length] *= 5
+    # flat_covariance_matrices[:, :, horizon_length:] *= 3
+
     return centers, loss.item()
+    #return centers, flat_covariance_matrices, loss.item()
+
+

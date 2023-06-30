@@ -6,7 +6,8 @@ import math
 
 class MPPI:
     def __init__(self, robot, state_dim, ctrl_dim, noise_mu, noise_sigma, u_min, u_max, dynamics,
-                 running_cost, terminal_state_cost, expert_rollouts = None, expert_samples = None, noise_expert = None,
+                 running_cost, terminal_state_cost, 
+                 expert_rollouts = None, expert_samples = None, expert_mu = None, expert_noise = None,
                  num_samples = 1000, horizon = 15, lambda_=1., sample_null_action= False,
                  timestep=1, device = "cpu"):
         self.robot = robot
@@ -51,9 +52,18 @@ class MPPI:
         self.expert_rollouts = expert_rollouts
         self.expert_samples = expert_samples
 
-        if(self.expert_samples is not None and noise_expert is not None):
-            self.expert_sigma = noise_expert.to(self.device)
-            self.expert_distr = MultivariateNormal(self.noise_mu, covariance_matrix = self.expert_sigma)
+        self.expert_mu = expert_mu.to(self.device)
+        if(self.expert_samples is not None and expert_noise is not None):
+            self.expert_distr = []
+            if len(expert_noise.shape) >=3:
+                
+                for i in range (expert_noise.shape[0]):
+                    expert_sigma = expert_noise[i].to(self.device)
+                    self.expert_distr.append(MultivariateNormal(self.expert_mu, covariance_matrix = expert_sigma))
+
+            else:
+                expert_sigma = expert_noise.to(self.device)
+                self.expert_distr.append(MultivariateNormal(self.expert_mu, covariance_matrix = expert_sigma))
         
         self.total_cost = None
         self.total_cost_exponent = None
@@ -112,9 +122,21 @@ class MPPI:
         if(self.expert_rollouts != None):
             if(self.expert_samples != None):
                 for i in range(self.expert_rollouts.shape[0]):
-                    samples = self.expert_distr.rsample((self.expert_samples[i], self.T))
-                    perturbed_expert = self.expert_rollouts[i] + samples
+                    if(len(self.expert_distr) > 1):
+
+                        samples = self.expert_distr[i].rsample((self.expert_samples[i],))
+                        # expert rollouts[i] are K x T x N
+                        # samples are 50 x TN 
+                        perturbed_expert = torch.cat(
+                            ((self.expert_rollouts[i, :, 0, None] + samples[:, :self.T, None]), 
+                            (self.expert_rollouts[i, :, 1, None] + samples[:, self.T:, None])), axis = 2)
+
+                    else:
+                        samples = self.expert_distr[0].rsample((self.expert_samples[i], self.T))
+                        perturbed_expert = self.expert_rollouts[i] + samples
+
                     perturbed_action = torch.cat((perturbed_action, perturbed_expert), axis = 0)
+                    del perturbed_expert
             else:
                 samples = self.noise_distr.rsample((self.random_samples, self.T))
                 perturbed_action = torch.cat((perturbed_action, self.expert_rollouts), axis = 0)
@@ -146,6 +168,7 @@ class MPPI:
         del action_cost
         del rollout_cost
         del perturbation_cost
+        del bounded_perturbed_action
 
         return self.cost_total
                                             
