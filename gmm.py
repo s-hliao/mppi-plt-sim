@@ -122,7 +122,7 @@ def loglikelihood(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     m = normalized_expert.shape[0]
     total = torch.zeros([m], device = dev)
     for cluster in range(k):
-        total += pi[cluster] * prob(normalized_expert, mu[cluster], sigma[cluster])
+        total += pi[cluster] * compute_prob(normalized_expert, means[cluster], sigma[cluster])
 
     ll = np.log(total)
     ans = np.sum(ll)
@@ -130,21 +130,21 @@ def loglikelihood(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     return ans
 
 def run_model(expert_rollouts, k=3, iterations = 200):
-    normalized_expert = torch.empty_like(expert, device = torch.device('cuda:0'))
+    normalized_expert = torch.empty_like(expert_rollouts, device = torch.device('cuda:0'))
     
 
-    normalized_expert[:, :, 0] = (expert[:, :, 0] - 5)/5
-    normalized_expert[:, :, 1] = (expert[:, :, 1] - 0)/4
+    normalized_expert[:, :, 0] = (expert_rollouts[:, :, 0] - 5)/5
+    normalized_expert[:, :, 1] = (expert_rollouts[:, :, 1] - 0)/4
 
     means, sigma, pi = init_params(normalized_expert, k, dev = torch.device('cuda:0'))
-    centers = torch.empty_like(means, device = torch.device('cuda:0'))
 
     resp = None
 
-    for iter in range interations():
+    for iter in range(iterations):
         resp = E_step(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
         means, sigma, pi = M_step(normalized_expert, resp, k)
 
     ll = loglikelihood(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
+    return means, sigma, pi, ll
 
 
