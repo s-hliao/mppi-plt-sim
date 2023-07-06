@@ -13,7 +13,7 @@ def init_params(normalized_expert, k, dev = "cpu"):
     means, assigments, loss = kmeans.k_means_segment(normalized_expert, k, 100)
 
 
-<<<<<<< HEAD
+
     resp = torch.empty((k, normalized_expert.shape[0]), dtype = torch.float64, device = dev)
     for i in range(k):
         resp[i, :] = torch.where(assigments==i, 1., 0.)
@@ -33,20 +33,22 @@ def init_params(normalized_expert, k, dev = "cpu"):
     #     del closest_c_dist
     #     del min_indices
     #     del total_dist
-=======
-        num_init+=1
-        del diff
-        del dist
-        del closest_c_dist
-        del min_indices
-        del total_dist
+
+    #     num_init+=1
+    #     del diff
+    #     del dist
+    #     del closest_c_dist
+    #     del min_indices
+    #     del total_dist
     
-    sigma = compute_sigma(normalized_expert,k, means, True)
-    pi = torch.ones(k, device = dev)/k
->>>>>>> main
+    # sigma = compute_sigma(normalized_expert,k, means, True)
+    # pi = torch.ones(k, device = dev)/k
 
 
-    return means, sigma, pi
+
+    # return means, sigma, pi
+
+    return resp
 
 def flatten_params(normalized_expert, means):
     flat_expert = torch.flatten(torch.swapaxes(normalized_expert, 1, 2), start_dim = 1)
