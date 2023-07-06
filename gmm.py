@@ -96,7 +96,7 @@ def E_step(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     likelihood = torch.empty([k, m], device = dev)
     
     for cluster in range(k):
-        likelihood[cluster,:] = torch.log(pi[cluster])+ torch.log(prob(X, means[cluster], sigma[cluster]))
+        likelihood[cluster,:] = torch.log(pi[cluster])+torch.log(compute_prob(normalized_expert, means[cluster], sigma[cluster]))
 
     likelihood = likelihood-torch.max(likelihood, dim = 0)[None,:]
     recover = torch.exp(likelihood)
@@ -118,7 +118,7 @@ def M_step(normalized_expert, resp, k, dev = "cpu"):
         cluster_resp= torch.sum(resp[cluster])
 
         new_pi[cluster] = cluster_resp/m
-        new_mu[cluster] = torch.sum(resp[cluster,:][:, None]*X, dim = 0) * 1/cluster_resp
+        new_mu[cluster] = torch.sum(resp[cluster,:][:, None]*normalized_expert, dim = 0) * 1/cluster_resp
         diff = normalized_expert-new_mu[cluster]
         new_sigma[cluster] = np.matmul(resp[cluster,:].T * diff.T, diff)/cluster_resp
 
@@ -132,8 +132,8 @@ def loglikelihood(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     for cluster in range(k):
         total += pi[cluster] * compute_prob(normalized_expert, means[cluster], sigma[cluster])
 
-    ll = np.log(total)
-    ans = np.sum(ll)
+    ll = torch.log(total)
+    ans = torch.sum(ll)
 
     return ans
 
@@ -153,6 +153,20 @@ def run_model(expert_rollouts, k=3, iterations = 200):
         
 
     ll = loglikelihood(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
-    return means, sigma, pi, ll
+    
+    means[:, :, 0] = (means[:, :, 0]* 5)+5
+    means[:, :, 1] = (means[:, :, 1]* 4)
+
+    horizon_length = expert_rollouts.shape[1]
+
+    sigma[:, :horizon_length, :] *= 5
+    sigma[:, horizon_length:, :] *= 4
+
+    sigma[:, :, :horizon_length] *= 5
+    sigma[:, :, horizon_length:] *= 4
+
+    mean_rollouts = torch.reshape(mean_rollouts, k, horizon_length, 2)
+
+    return means_rollouts, sigma, pi, ll
 
 
