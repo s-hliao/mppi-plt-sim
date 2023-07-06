@@ -103,7 +103,7 @@ def k_means_segment(expert, k=3, iterations = 200):
     # flat_covariance_matrices[:, :, :horizon_length] *= 5
     # flat_covariance_matrices[:, :, horizon_length:] *= 3
 
-    return centers, loss.item()
+    return centers, assignments, loss.item()
     #return centers, flat_covariance_matrices, loss.item()
 
 

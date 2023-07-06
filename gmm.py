@@ -1,29 +1,37 @@
 import torch
 import numpy as np
+import kmeans
 
 def init_params(normalized_expert, k, dev = "cpu"):
-    num_init = 1
+    # num_init = 1
 
-    means = torch.empty((k, normalized_expert.shape[1], normalized_expert.shape[2]), device = dev)
+    # means = torch.empty((k, normalized_expert.shape[1], normalized_expert.shape[2]), device = dev)
 
-    num_expert = normalized_expert.shape[0]
-    means[0] = normalized_expert[np.random.choice(num_expert), :, :]
+    # num_expert = normalized_expert.shape[0]
+    # means[0] = normalized_expert[np.random.choice(num_expert), :, :]
 
-    while num_init < k:
-        diff = normalized_expert[None, :, :, :] - means[0:num_init, None, :, :]
-        dist = torch.sum(diff * diff, dim=(2, 3))
+    means, assigments, loss = kmeans.k_means_segment(normalized_expert, k, 100)
 
-        #dist is clusters x points
-        closest_c_dist, min_indices = torch.min(dist, dim = 0)
-        total_dist = torch.sum(closest_c_dist)
-        means[num_init] = normalized_expert[np.random.choice(num_expert, p = closest_c_dist.cpu().numpy()/total_dist.item())]
 
-        num_init+=1
-        del diff
-        del dist
-        del closest_c_dist
-        del min_indices
-        del total_dist
+    resp = torch.empty((k, normalized_expert.shape[0]), dtype = torch.float64, device = dev)
+    for i in range(k):
+        resp[i, :] = torch.where(assigments==i, 1., 0.)
+
+    # while num_init < k:
+    #     diff = normalized_expert[None, :, :, :] - means[0:num_init, None, :, :]
+    #     dist = torch.sum(diff * diff, dim=(2, 3))
+
+    #     #dist is clusters x points
+    #     closest_c_dist, min_indices = torch.min(dist, dim = 0)
+    #     total_dist = torch.sum(closest_c_dist)
+    #     means[num_init] = normalized_expert[np.random.choice(num_expert, p = closest_c_dist.cpu().numpy()/total_dist.item())]
+
+    #     num_init+=1
+    #     del diff
+    #     del dist
+    #     del closest_c_dist
+    #     del min_indices
+    #     del total_dist
 
 
     return means
@@ -136,13 +144,13 @@ def run_model(expert_rollouts, k=3, iterations = 200):
     normalized_expert[:, :, 0] = (expert_rollouts[:, :, 0] - 5)/5
     normalized_expert[:, :, 1] = (expert_rollouts[:, :, 1] - 0)/4
 
-    means, sigma, pi = init_params(normalized_expert, k, dev = torch.device('cuda:0'))
+    resp = init_params(normalized_expert, k, dev = torch.device('cuda:0'))
 
-    resp = None
 
     for iter in range(iterations):
-        resp = E_step(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
         means, sigma, pi = M_step(normalized_expert, resp, k)
+        resp = E_step(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
+        
 
     ll = loglikelihood(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
     return means, sigma, pi, ll
