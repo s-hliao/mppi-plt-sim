@@ -68,33 +68,54 @@ def compute_sigma(normalized_expert, k, means, flatten = False, dev = "cpu"):
 
     flat_covariance_matrices = torch.empty((means.shape[0], matrix_size, matrix_size), 
         dtype = normalized_expert.dtype, device = dev)
+    
 
     for i in range(k):
+        #print(flat_means[i, :])
+        diff = torch.empty_like(flat_expert[:, :], dtype =torch.float64, device = dev)
         diff = flat_expert[:, :] - flat_means[i, :]
-        flat_covariance_matrices[i] = torch.matmul(torch.t(diff), diff)/normalized_expert.shape[0]
 
+    
+        flat_covariance_matrices[i] = torch.matmul(torch.t(diff), diff)/ normalized_expert.shape[0]
+        torch.set_printoptions(threshold=10_000)
+        #print(flat_covariance_matrices[i])
+        #print(torch.linalg.det(flat_covariance_matrices[i]*10))
+
+        
         del diff
     del flat_expert
     del flat_means
 
     return flat_covariance_matrices
 
-def compute_prob(normalized_expert, means, sigma, flatten= False):
+def compute_prob(normalized_expert, means, sigma, flatten= False, dev = "cpu"):
     if flatten:
         flat_expert, flat_means = flatten_params(normalized_expert, means)
     else:
         flat_expert = normalized_expert
         flat_means = means
 
+    #print(normalized_expert.shape)
+    #print(means.shape)
+    #print(sigma.shape)
+
     n = flat_means.shape[0]
+
     d = torch.linalg.det(sigma).item()
+    print(sigma)
+    print(means)
+    #print(np.linalg.det(sigma.cpu() *3))
+
     denom = np.power(2*np.pi, n/2)*np.power(d, 0.5)
+
+    #print(denom)
 
     inv = torch.linalg.pinv(sigma)
 
-    exponent_calc = torch.empty(flat_expert.shape[0])
+    exponent_calc = torch.empty(flat_expert.shape[0], device = dev)
 
     diff = flat_expert-flat_means
+
     diffS = torch.matmul(diff, inv)
     epower = -.5 * torch.einsum("ij, ji->i",diffS, torch.t(diff))
 
@@ -108,11 +129,15 @@ def E_step(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     n = means.shape[1]
     m = normalized_expert.shape[0]
     likelihood = torch.empty([k, m], device = dev)
-    
-    for cluster in range(k):
-        likelihood[cluster,:] = torch.log(pi[cluster])+torch.log(compute_prob(normalized_expert, means[cluster], sigma[cluster]))
 
-    likelihood = likelihood-torch.max(likelihood, dim = 0)[None,:]
+    # print(normalized_expert.shape)
+    # print(means.shape)
+
+    for cluster in range(k):
+
+        likelihood[cluster,:] = torch.log(pi[cluster])+torch.log(
+            compute_prob(normalized_expert, means[cluster], sigma[cluster], dev= dev))
+    likelihood = likelihood-torch.max(likelihood, dim = 0).values[None,:]
     recover = torch.exp(likelihood)
     total = torch.sum(recover, dim= 0)
     resp = recover/total[None,:]
@@ -134,7 +159,7 @@ def M_step(normalized_expert, resp, k, dev = "cpu"):
         new_pi[cluster] = cluster_resp/m
         new_mu[cluster] = torch.sum(resp[cluster,:][:, None]*normalized_expert, dim = 0) * 1/cluster_resp
         diff = normalized_expert-new_mu[cluster]
-        new_sigma[cluster] = np.matmul(resp[cluster,:].T * diff.T, diff)/cluster_resp
+        new_sigma[cluster] = torch.matmul(resp[cluster,:].t() * diff.t(), diff)/cluster_resp
 
     return new_mu, new_sigma, new_pi
 
@@ -143,8 +168,9 @@ def loglikelihood(normalized_expert, means, sigma, pi, k, dev = "cpu"):
 
     m = normalized_expert.shape[0]
     total = torch.zeros([m], device = dev)
+    
     for cluster in range(k):
-        total += pi[cluster] * compute_prob(normalized_expert, means[cluster], sigma[cluster])
+        total += pi[cluster] * compute_prob(normalized_expert, means[cluster], sigma[cluster], dev = dev)
 
     ll = torch.log(total)
     ans = torch.sum(ll)
@@ -152,35 +178,47 @@ def loglikelihood(normalized_expert, means, sigma, pi, k, dev = "cpu"):
     return ans
 
 def run_model(expert_rollouts, k=3, iterations = 200):
-    normalized_expert = torch.empty_like(expert_rollouts, device = torch.device('cuda:0'))
+    normalized_expert = expert_rollouts
+    # normalized_expert = torch.empty_like(expert_rollouts, device = torch.device('cuda:0'))
     
 
-    normalized_expert[:, :, 0] = (expert_rollouts[:, :, 0] - 5)/5
-    normalized_expert[:, :, 1] = (expert_rollouts[:, :, 1] - 0)/4
+    # normalized_expert[:, :, 0] = (expert_rollouts[:, :, 0] - 5)/5
+    # normalized_expert[:, :, 1] = (expert_rollouts[:, :, 1] - 0)/4
 
     resp = init_params(normalized_expert, k, dev = torch.device('cuda:0'))
 
+    flat_expert, flat_means = flatten_params(normalized_expert, means)
+
+    #print(means.shape)
+
+    resp = None
 
     for iter in range(iterations):
         means, sigma, pi = M_step(normalized_expert, resp, k)
         resp = E_step(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
         
+        resp = E_step(flat_expert, flat_means, sigma, pi, k, torch.device('cuda:0'))
+        flat_means, sigma, pi = M_step(flat_expert, resp, k, torch.device('cuda:0'))
 
-    ll = loglikelihood(normalized_expert, means, sigma, pi, k, torch.device('cuda:0'))
+        ll = loglikelihood(flat_expert, flat_means, sigma, pi, k, torch.device('cuda:0'))
+
+        if iter%10 == 0:
+            print (iter, ll)
     
-    means[:, :, 0] = (means[:, :, 0]* 5)+5
-    means[:, :, 1] = (means[:, :, 1]* 4)
 
     horizon_length = expert_rollouts.shape[1]
 
-    sigma[:, :horizon_length, :] *= 5
-    sigma[:, horizon_length:, :] *= 4
+    # means[:, :, 0] = (flat_means[:, :horizon_length]* 5)+5
+    # means[:, :, 1] = (flat_means[:, horizon_length:]* 4)
 
-    sigma[:, :, :horizon_length] *= 5
-    sigma[:, :, horizon_length:] *= 4
+    # sigma[:, :horizon_length, :] *= 5
+    # sigma[:, horizon_length:, :] *= 4
 
-    mean_rollouts = torch.reshape(mean_rollouts, k, horizon_length, 2)
+    # sigma[:, :, :horizon_length] *= 5
+    # sigma[:, :, horizon_length:] *= 4
 
-    return means_rollouts, sigma, pi, ll
+    #print(means.shape)
+
+    return means, sigma, pi, ll
 
 
