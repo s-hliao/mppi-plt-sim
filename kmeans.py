@@ -85,12 +85,10 @@ def k_means_segment(expert, k=3, iterations = 200):
 
     means = init_means(normalized_expert, k, dev = torch.device('cuda:0'))
     centers = torch.empty_like(means, device = torch.device('cuda:0'))
-    
     for iter in range(iterations):
         loss, means, assignments = k_means_step(normalized_expert, k, means, dev = torch.device('cuda:0'))
     # flat_covariance_matrices = get_flattened_normalized_covariance(normalized_expert, k, means, assignments, dev = torch.device('cuda:0'))
 
-    del assignments
 
     centers[:, :, 0] = (means[:, :, 0]* 5)+5
     centers[:, :, 1] = (means[:, :, 1]* 3)
