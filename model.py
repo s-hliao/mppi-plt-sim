@@ -117,7 +117,7 @@ class Bicycle:
         
         
 class Map:# may have to instantiate map class for more complex costmaps and stuff
-    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=10000000.):
+    def __init__(self, goal_point, avoidance_points =[], rect_obstacles=[], circle_obstacles=[], speed_weight = .5, device="cpu", obstacle_penalty=10000.):
         self.goal_point = goal_point
         self.avoidance_points = avoidance_points
         self.rect_obstacles = rect_obstacles

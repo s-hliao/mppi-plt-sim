@@ -29,6 +29,7 @@ class Simulation:
         for step in range(iterations):
             velocity, steer = self.controller.find_control(self.robot.get_state())
             if(write_snapshots and self.steps % write_rate==0):
+                #print(step)
                 rollouts = None
                 controls = None
                 if(write_rollouts):

@@ -78,10 +78,16 @@ def k_means_step(normalized_expert, k, means, dev = "cpu"):
 def k_means_segment(expert, k=3, iterations = 200):
     #kplusplus init
     normalized_expert = torch.empty_like(expert, device = torch.device('cuda:0'))
+
+
+    speedmean = expert[:, :, 0].mean()
+    speedvar = expert[:, :, 0].std()
+    steermean = expert[:, :, 1].mean()
+    steervar = expert[:, :, 1].std()
     
 
-    normalized_expert[:, :, 0] = (expert[:, :, 0] - 5)/5
-    normalized_expert[:, :, 1] = (expert[:, :, 1] - 0)/4
+    normalized_expert[:, :, 0] = (expert[:, :, 0] - speedmean)/speedvar
+    normalized_expert[:, :, 1] = (expert[:, :, 1] - steermean)/steervar
 
     means = init_means(normalized_expert, k, dev = torch.device('cuda:0'))
     centers = torch.empty_like(means, device = torch.device('cuda:0'))
@@ -90,8 +96,8 @@ def k_means_segment(expert, k=3, iterations = 200):
     # flat_covariance_matrices = get_flattened_normalized_covariance(normalized_expert, k, means, assignments, dev = torch.device('cuda:0'))
 
 
-    centers[:, :, 0] = (means[:, :, 0]* 5)+5
-    centers[:, :, 1] = (means[:, :, 1]* 3)
+    centers[:, :, 0] = (means[:, :, 0]* speedvar)+speedmean
+    centers[:, :, 1] = (means[:, :, 1]* steervar)+steermean
 
     horizon_length = normalized_expert.shape[1]
 
