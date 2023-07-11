@@ -196,7 +196,7 @@ def run_model(expert_rollouts, k=3, iterations = 2):
 
     resp = torch.zeros((k, expert_rollouts.shape[0]), dtype = torch.float32, device = torch.device('cuda:0'))
     for i in range(k):
-        resp[i, :] = torch.where(assigments==i, 1., 0.)
+        resp[i, :] = torch.where(assigments==i, torch.tensor(1.), torch.tensor(0.))
 
     speedmean = expert_rollouts[:, :, 0].mean()
     speedvar = expert_rollouts[:, :, 0].std()
